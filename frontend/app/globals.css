@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --fcc-bg: #0A0A0F;
+  --fcc-surface: #12121A;
+  --fcc-border: #1E1E2E;
+  --fcc-text: #E4E4E7;
+  --fcc-muted: #71717A;
+  --fcc-accent: #3B82F6;
+  --fcc-success: #22C55E;
+  --fcc-error: #EF4444;
+  --fcc-warning: #F59E0B;
+}
+
+body {
+  background: var(--fcc-bg);
+  color: var(--fcc-text);
+  font-family: "Inter", sans-serif;
+  margin: 0;
+  min-width: 1024px;
+  overflow-x: auto;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--fcc-bg); }
+::-webkit-scrollbar-thumb { background: var(--fcc-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fcc-muted); }
+
+/* Code blocks */
+pre, code { font-family: "JetBrains Mono", monospace; }
