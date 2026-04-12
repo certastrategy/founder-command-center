@@ -2,6 +2,11 @@
 
 A single-founder AI command system that routes tasks through an 8-department pipeline and produces structured, audited outputs. This is not a chatbot — it is an execution engine.
 
+## Requirements
+
+- Python 3.10+
+- Anthropic API key
+
 ## Quick Start
 
 ```bash
