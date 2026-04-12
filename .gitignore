@@ -7,3 +7,7 @@ logs/
 .vscode/
 .idea/
 .DS_Store
+node_modules/
+.next/
+frontend/.next/
+frontend/node_modules/
