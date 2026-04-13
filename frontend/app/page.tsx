@@ -48,7 +48,12 @@ export default function FounderCommandCenter() {
 
   // Task form state
   const [form, setForm] = useState<TaskRequest>({
-    title: "", task_type: "auto", background: "", goal: "", constraints: "", desired_outputs: "",
+    title: "",
+    task_type: "auto",
+    background: "",
+    goal: "",
+    constraints: "",
+    desired_outputs: "",
   })
 
   // Running task state
@@ -76,24 +81,63 @@ export default function FounderCommandCenter() {
       .catch(() => setBackendOnline(false))
   }, [])
 
+  // Restore task from localStorage on mount
+  useEffect(() => {
+    const savedTaskId = localStorage.getItem("fcc_taskId")
+    if (savedTaskId) {
+      setTaskId(savedTaskId)
+      // Attempt to restore status and output from backend
+      getTaskStatus(savedTaskId)
+        .then((status) => {
+          setTimeout(() => {
+            setTaskStatus(status)
+          }, 0)
+          if (status.status === "completed" || status.status === "failed") {
+            return getTaskOutput(savedTaskId).then((output) => {
+              setTimeout(() => {
+                setTaskOutput(output)
+                setOutputTab("final")
+              }, 0)
+            })
+          } else if (status.status === "running" || status.status === "queued") {
+            // Resume polling
+            setIsRunning(true)
+            pollRef.current = setInterval(() => pollStatus(savedTaskId), 2000)
+          }
+        })
+        .catch(() => {
+          // Backend may have restarted, clear stale taskId
+          localStorage.removeItem("fcc_taskId")
+        })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Poll task status
   const pollStatus = useCallback(async (id: string) => {
     try {
       const status = await getTaskStatus(id)
-      setTaskStatus(status)
+      // Defer state updates to next microtask to avoid React DOM reconciliation conflicts
+      setTimeout(() => {
+        setTaskStatus(status)
+      }, 0)
 
       if (status.status === "completed" || status.status === "failed") {
         if (pollRef.current) clearInterval(pollRef.current)
         pollRef.current = null
-        setIsRunning(false)
 
-        if (status.status === "failed" && status.error) {
-          setErrorMsg(status.error)
-        }
+        setTimeout(() => {
+          setIsRunning(false)
+          if (status.status === "failed" && status.error) {
+            setErrorMsg(status.error)
+          }
+        }, 0)
 
         const output = await getTaskOutput(id)
-        setTaskOutput(output)
-        setOutputTab("final")
+        setTimeout(() => {
+          setTaskOutput(output)
+          setOutputTab("final")
+        }, 0)
 
         getTaskHistory().then((h) => setHistory(h.tasks)).catch(() => {})
       }
@@ -113,6 +157,8 @@ export default function FounderCommandCenter() {
     try {
       const result = await runTask(form)
       setTaskId(result.task_id)
+      // Persist taskId so it survives browser refresh
+      localStorage.setItem("fcc_taskId", result.task_id)
 
       pollRef.current = setInterval(() => pollStatus(result.task_id), 2000)
       setTimeout(() => pollStatus(result.task_id), 500)
@@ -134,6 +180,8 @@ export default function FounderCommandCenter() {
     setTaskOutput(null)
     setIsRunning(false)
     setErrorMsg(null)
+    // Clear persisted taskId
+    localStorage.removeItem("fcc_taskId")
     if (pollRef.current) clearInterval(pollRef.current)
   }
 
@@ -152,7 +200,9 @@ export default function FounderCommandCenter() {
 
   // Cleanup polling on unmount
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
   }, [])
 
   const navItems: { icon: typeof Terminal; view: View; label: string }[] = [
@@ -183,10 +233,8 @@ export default function FounderCommandCenter() {
           </button>
         ))}
         <div className="mt-auto flex flex-col items-center">
-          <div
-            className={`w-2 h-2 rounded-full ${backendOnline ? "bg-fcc-success" : "bg-fcc-error"}`}
-            title={backendOnline ? "Backend online" : "Backend offline"}
-          />
+          <div className={`w-2 h-2 rounded-full ${backendOnline ? "bg-fcc-success" : "bg-fcc-error"}`}
+            title={backendOnline ? "Backend online" : "Backend offline"} />
           <p className="text-[9px] text-fcc-muted mt-2 text-center leading-tight">FCC<br/>V1.1</p>
         </div>
       </div>
@@ -194,19 +242,18 @@ export default function FounderCommandCenter() {
       {/* Main content */}
       <div className="flex-1 overflow-hidden">
 
-        {/* âââ COMMAND VIEW âââ */}
+        {/* --- COMMAND VIEW --- */}
         {view === "command" && (
           <div className="flex h-full">
+
             {/* Left: Task Input */}
             <div className="w-80 bg-fcc-surface border-r border-fcc-border p-4 overflow-y-auto shrink-0">
               <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                <Terminal size={16} className="text-fcc-accent" />
-                Task Input
+                <Terminal size={16} className="text-fcc-accent" /> Task Input
               </h2>
 
               <label className="block text-xs text-fcc-muted mb-1">Task Title *</label>
-              <input
-                type="text"
+              <input type="text"
                 placeholder="e.g., Pre-Seed Financing Deck for CertaStrategy"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -225,8 +272,7 @@ export default function FounderCommandCenter() {
               </select>
 
               <label className="block text-xs text-fcc-muted mb-1">Background</label>
-              <textarea
-                rows={3}
+              <textarea rows={3}
                 placeholder="Context about your company, product, or project..."
                 value={form.background}
                 onChange={(e) => setForm({ ...form, background: e.target.value })}
@@ -234,8 +280,7 @@ export default function FounderCommandCenter() {
               />
 
               <label className="block text-xs text-fcc-muted mb-1">Goal</label>
-              <textarea
-                rows={3}
+              <textarea rows={3}
                 placeholder="What do you want to achieve with this task?"
                 value={form.goal}
                 onChange={(e) => setForm({ ...form, goal: e.target.value })}
@@ -243,8 +288,7 @@ export default function FounderCommandCenter() {
               />
 
               <label className="block text-xs text-fcc-muted mb-1">Constraints</label>
-              <textarea
-                rows={2}
+              <textarea rows={2}
                 placeholder="Any limitations, budgets, timelines..."
                 value={form.constraints}
                 onChange={(e) => setForm({ ...form, constraints: e.target.value })}
@@ -252,17 +296,14 @@ export default function FounderCommandCenter() {
               />
 
               <label className="block text-xs text-fcc-muted mb-1">Desired Outputs</label>
-              <textarea
-                rows={2}
+              <textarea rows={2}
                 placeholder="What deliverables do you need?"
                 value={form.desired_outputs}
                 onChange={(e) => setForm({ ...form, desired_outputs: e.target.value })}
                 className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm mb-3 placeholder:text-fcc-muted/50 resize-none focus:outline-none focus:border-fcc-accent"
               />
 
-              <button
-                onClick={handleRunTask}
-                disabled={!canRun}
+              <button onClick={handleRunTask} disabled={!canRun}
                 className="w-full bg-fcc-accent text-white py-2.5 rounded-md text-sm font-medium mb-2 hover:bg-fcc-accent/90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
               >
                 {isRunning ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
@@ -270,7 +311,8 @@ export default function FounderCommandCenter() {
               </button>
 
               <div className="flex gap-2">
-                <button onClick={handleClear} className="flex-1 bg-fcc-bg border border-fcc-border py-2 rounded-md text-sm text-fcc-muted hover:text-fcc-text transition-colors">
+                <button onClick={handleClear}
+                  className="flex-1 bg-fcc-bg border border-fcc-border py-2 rounded-md text-sm text-fcc-muted hover:text-fcc-text transition-colors">
                   Clear
                 </button>
               </div>
@@ -320,8 +362,7 @@ export default function FounderCommandCenter() {
                 <div className="space-y-1">
                   {taskStatus.steps.map((step, i) => (
                     <div key={i}>
-                      <button
-                        onClick={() => toggleStep(i)}
+                      <button onClick={() => toggleStep(i)}
                         className="w-full flex items-center gap-3 p-3 bg-fcc-surface border border-fcc-border rounded-md hover:border-fcc-muted/50 transition-colors text-left"
                       >
                         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -377,16 +418,17 @@ export default function FounderCommandCenter() {
               {/* Tab bar */}
               <div className="flex border-b border-fcc-border shrink-0">
                 {(["final", "summaries", "audit", "trace"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setOutputTab(tab)}
+                  <button key={tab} onClick={() => setOutputTab(tab)}
                     className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
                       outputTab === tab
                         ? "text-fcc-accent border-b-2 border-fcc-accent"
                         : "text-fcc-muted hover:text-fcc-text"
                     }`}
                   >
-                    {tab === "final" ? "Final Output" : tab === "summaries" ? "Dept Summaries" : tab === "audit" ? "Audit" : "Raw Trace"}
+                    {tab === "final" ? "Final Output"
+                      : tab === "summaries" ? "Dept Summaries"
+                      : tab === "audit" ? "Audit"
+                      : "Raw Trace"}
                   </button>
                 ))}
               </div>
@@ -452,32 +494,22 @@ export default function FounderCommandCenter() {
               {/* Action bar */}
               {taskOutput && (
                 <div className="flex items-center gap-1 p-2 border-t border-fcc-border shrink-0">
-                  <button
-                    onClick={() => navigator.clipboard.writeText(taskOutput.final_output)}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors"
-                    title="Copy final output"
-                  >
+                  <button onClick={() => navigator.clipboard.writeText(taskOutput.final_output)}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors" title="Copy final output">
                     <Copy size={12} /> Copy
                   </button>
-                  <button
-                    onClick={() => {
-                      const blob = new Blob([taskOutput.final_output], { type: "text/markdown" })
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement("a")
-                      a.href = url; a.download = `fcc-output-${taskId}.md`; a.click()
-                      URL.revokeObjectURL(url)
-                    }}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors"
-                    title="Download as markdown"
-                  >
+                  <button onClick={() => {
+                    const blob = new Blob([taskOutput.final_output], { type: "text/markdown" })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement("a")
+                    a.href = url; a.download = `fcc-output-${taskId}.md`; a.click()
+                    URL.revokeObjectURL(url)
+                  }}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors" title="Download as markdown">
                     <Download size={12} /> .md
                   </button>
-                  <button
-                    onClick={handleRunTask}
-                    disabled={isRunning}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded disabled:opacity-50 transition-colors"
-                    title="Re-run task"
-                  >
+                  <button onClick={handleRunTask} disabled={isRunning}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded disabled:opacity-50 transition-colors" title="Re-run task">
                     <RotateCcw size={12} /> Re-run
                   </button>
                 </div>
@@ -486,12 +518,11 @@ export default function FounderCommandCenter() {
           </div>
         )}
 
-        {/* âââ HISTORY VIEW âââ */}
+        {/* --- HISTORY VIEW --- */}
         {view === "history" && (
           <div className="p-6 overflow-y-auto h-full">
             <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-              <Clock size={16} className="text-fcc-accent" />
-              Task History
+              <Clock size={16} className="text-fcc-accent" /> Task History
             </h2>
             {history.length === 0 ? (
               <p className="text-fcc-muted text-sm">No tasks yet. Run a task from the Command view.</p>
@@ -515,9 +546,9 @@ export default function FounderCommandCenter() {
                       <td className="py-2 px-3 text-fcc-muted text-xs">{t.workflow_name || t.workflow_key?.replace(/_/g, " ") || t.task_type}</td>
                       <td className="py-2 px-3">
                         <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${
-                          t.status === "completed" ? "bg-fcc-success/10 text-fcc-success" :
-                          t.status === "failed" ? "bg-fcc-error/10 text-fcc-error" :
-                          "bg-fcc-accent/10 text-fcc-accent"
+                          t.status === "completed" ? "bg-fcc-success/10 text-fcc-success"
+                            : t.status === "failed" ? "bg-fcc-error/10 text-fcc-error"
+                            : "bg-fcc-accent/10 text-fcc-accent"
                         }`}>
                           <StatusIcon status={t.status} />
                           {t.status}
@@ -537,12 +568,11 @@ export default function FounderCommandCenter() {
           </div>
         )}
 
-        {/* âââ TRACE VIEW âââ */}
+        {/* --- TRACE VIEW --- */}
         {view === "trace" && (
           <div className="p-6 overflow-y-auto h-full">
             <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-              <Layers size={16} className="text-fcc-accent" />
-              Department Trace
+              <Layers size={16} className="text-fcc-accent" /> Department Trace
             </h2>
             {!taskOutput ? (
               <p className="text-fcc-muted text-sm">Run a task first, then view the department trace here.</p>
@@ -572,12 +602,11 @@ export default function FounderCommandCenter() {
           </div>
         )}
 
-        {/* âââ SETTINGS VIEW âââ */}
+        {/* --- SETTINGS VIEW --- */}
         {view === "settings" && (
           <div className="p-6 max-w-lg">
             <h2 className="text-sm font-semibold mb-6 flex items-center gap-2">
-              <Settings size={16} className="text-fcc-accent" />
-              Settings
+              <Settings size={16} className="text-fcc-accent" /> Settings
             </h2>
             <div className="space-y-4">
               <div>
@@ -591,26 +620,30 @@ export default function FounderCommandCenter() {
                 <label className="block text-xs text-fcc-muted mb-1">API Key</label>
                 <div className={`flex items-center gap-2 text-sm ${apiKeyConfigured ? "text-fcc-success" : "text-fcc-warning"}`}>
                   <div className={`w-2 h-2 rounded-full ${apiKeyConfigured ? "bg-fcc-success" : "bg-fcc-warning"}`} />
-                  {apiKeyConfigured ? "Configured" : "Not set â add ANTHROPIC_API_KEY to .env"}
+                  {apiKeyConfigured ? "Configured" : "Not set \u2014 add ANTHROPIC_API_KEY to .env"}
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-fcc-muted mb-1">Model</label>
-                <input type="text" value={fccConfig?.model || "-"} disabled className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm font-mono text-fcc-muted" />
+                <input type="text" value={fccConfig?.model || "-"} disabled
+                  className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm font-mono text-fcc-muted" />
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="block text-xs text-fcc-muted mb-1">Max Tokens</label>
-                  <input type="text" value={fccConfig?.max_tokens || "-"} disabled className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm font-mono text-fcc-muted" />
+                  <input type="text" value={fccConfig?.max_tokens || "-"} disabled
+                    className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm font-mono text-fcc-muted" />
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs text-fcc-muted mb-1">Temperature</label>
-                  <input type="text" value={fccConfig?.temperature || "-"} disabled className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm font-mono text-fcc-muted" />
+                  <input type="text" value={fccConfig?.temperature || "-"} disabled
+                    className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm font-mono text-fcc-muted" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-fcc-muted mb-1">Version</label>
-                <input type="text" value={fccConfig?.version || "-"} disabled className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm text-fcc-muted" />
+                <input type="text" value={fccConfig?.version || "-"} disabled
+                  className="w-full bg-fcc-bg border border-fcc-border rounded-md px-3 py-2 text-sm text-fcc-muted" />
               </div>
               {fccConfig?.workflows && (
                 <div>
@@ -620,7 +653,7 @@ export default function FounderCommandCenter() {
                       <div key={key} className="p-2 bg-fcc-bg border border-fcc-border rounded-md">
                         <p className="text-xs font-medium">{wf.name}</p>
                         <p className="text-[10px] text-fcc-muted mt-0.5">
-                          {wf.chain.map((d) => fccConfig.departments[d]?.name || d).join(" â ")}
+                          {wf.chain.map((d) => fccConfig.departments[d]?.name || d).join(" \u2192 ")}
                         </p>
                       </div>
                     ))}
@@ -630,6 +663,7 @@ export default function FounderCommandCenter() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   )
