@@ -3,12 +3,13 @@ Founder Command Center - Task Router
 Identifies task type from user input and returns the matching workflow.
 """
 import logging
+from typing import Optional, Dict, List
 import config
 
 logger = logging.getLogger("fcc.router")
 
 
-def classify_task(user_input: str) -> str | None:
+def classify_task(user_input: str) -> Optional[str]:
     """
     Classify the user's input into one of the supported workflow types.
 
@@ -22,13 +23,13 @@ def classify_task(user_input: str) -> str | None:
         Workflow key string (e.g. 'financing_deck') or None.
     """
     text = user_input.lower()
-    scores: dict[str, int] = {}
+    scores: Dict[str, int] = {}
 
     for wf_key, wf_config in config.WORKFLOWS.items():
         score = 0
         for keyword in wf_config["keywords"]:
             if keyword in text:
-                # Longer keyword matches are more specific \u2192 higher weight
+                # Longer keyword matches are more specific -> higher weight
                 score += len(keyword.split())
         if score > 0:
             scores[wf_key] = score
@@ -42,7 +43,7 @@ def classify_task(user_input: str) -> str | None:
     return best
 
 
-def get_workflow_chain(workflow_key: str) -> list[str]:
+def get_workflow_chain(workflow_key: str) -> List[str]:
     """
     Return the ordered department chain for a given workflow.
 
