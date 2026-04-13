@@ -3,6 +3,7 @@ Founder Command Center - Anthropic API Client
 Handles all communication with the Claude API via official SDK.
 """
 import logging
+from typing import Optional
 from anthropic import Anthropic
 
 import config
@@ -29,9 +30,9 @@ def get_client() -> Anthropic:
 def call_department(
     system_prompt: str,
     user_message: str,
-    model: str | None = None,
-    max_tokens: int | None = None,
-    temperature: float | None = None,
+    model: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
 ) -> str:
     """
     Send a request to Claude acting as a specific department.
