@@ -1,11 +1,8 @@
-# Founder Command Center V1
+# Founder Command Center V1.1
 
-A single-founder AI command system that routes tasks through an 8-department pipeline and produces structured, audited outputs. This is not a chatbot — it is an execution engine.
+A single-founder AI command system that routes tasks through an 8-department pipeline and produces structured, audited outputs. This is not a chatbot â it is an execution engine.
 
-## Requirements
-
-- Python 3.10+
-- Anthropic API key
+**V1.1** adds a web dashboard and API layer on top of the CLI engine.
 
 ## Quick Start
 
@@ -16,19 +13,42 @@ cd founder-command-center
 
 # 2. Install dependencies
 pip install -r requirements.txt
+cd frontend && npm install && cd ..
 
 # 3. Set your API key
 cp .env.example .env
 # Edit .env and add your ANTHROPIC_API_KEY
 
-# 4. Run with sample input
-python main.py --input inputs/sample_input.md --yes
+# 4. Start the system
+python api/server.py &          # Backend on port 8000
+cd frontend && npm run dev &    # Frontend on port 3000
 
-# Or run interactively
-python main.py
+# 5. Open http://localhost:3000
 ```
 
+Or use the setup script: `bash setup.sh`
+
+## Requirements
+
+- Python 3.10+
+- Node.js 18+
+- Anthropic API key
+
 ## Architecture
+
+```
+Browser (localhost:3000)
+    â
+    â  /api/* requests (Next.js rewrites)
+    â¼
+FastAPI Backend (localhost:8000)
+    â
+    â  router.py â classify_task()
+    â  workflows/base.py â execute_chain()
+    â  client.py â call_department()
+    â¼
+Anthropic API (Claude)
+```
 
 ### 8 Departments
 
@@ -43,52 +63,53 @@ python main.py
 | 7 | **Monetization & Operations** | Revenue model, pricing, unit economics (support) |
 | 8 | **Audit & Red Team** | Critical review, adversarial testing, quality assurance |
 
-### 4 Supported Workflows
+### 4 Workflows
 
-**Financing Deck** — `Command Center → Strategy → Capital → Narrative → Audit → Final`
+| Workflow | Pipeline |
+|----------|----------|
+| **Financing Deck** | Command Center â Strategy â Capital â Narrative â Audit â Final |
+| **Website Strategy** | Command Center â Strategy â Narrative â Product & Tech â Audit â Final |
+| **Proposal** | Command Center â Strategy â Capital â Narrative â Audit â Final |
+| **Project Definition** | Command Center â Strategy â Product & Tech â Narrative â Audit â Final |
 
-**Website Strategy** — `Command Center → Strategy → Narrative → Product & Tech → Audit → Final`
+## Web Dashboard (V1.1)
 
-**Proposal** — `Command Center → Strategy → Capital → Narrative → Audit → Final`
+The dashboard has four views:
 
-**Project Definition** — `Command Center → Strategy → Product & Tech → Narrative → Audit → Final`
+- **Command** â Input a task, watch departments execute in real-time, view final output
+- **History** â Browse all past task runs with status, duration, and workflow type
+- **Trace** â Expand each department's output step-by-step
+- **Settings** â View configuration, backend status, and available workflows
 
-## Usage
+The left panel takes task input (title, type, background, goal, constraints, desired outputs). The center shows the live workflow pipeline with step-by-step status. The right panel shows the final output, department summaries, audit findings, and raw trace.
+
+## CLI Usage (V1)
 
 ```bash
-# Interactive mode — type your task and press Enter twice
+# Interactive mode
 python main.py
 
-# File input — reads from a markdown file
+# File input
 python main.py --input inputs/sample_input.md
 
-# Direct workflow selection — skip auto-detection
-python main.py --task financing_deck --input inputs/sample_input.md
-
-# Skip confirmation prompt
+# Direct workflow selection
 python main.py --task financing_deck --input inputs/sample_input.md --yes
 
-# List available workflows
+# List workflows
 python main.py --list
 ```
 
-## Output Structure
+## API Endpoints
 
-Each run creates a timestamped directory in `outputs/`:
-
-```
-outputs/financing_deck_20260411_143022/
-├── step_01_command_center.md         # Task intake
-├── step_02_strategy_structuring.md   # Strategic framing
-├── step_03_capital_deal.md           # Financial structure
-├── step_04_narrative_media.md        # Content & messaging
-├── step_05_audit_red_team.md         # Critical review
-├── step_06_command_center.md         # Final integration
-├── FINAL_OUTPUT.md                   # Integrated deliverable
-└── run_metadata.json                 # Run metadata
-```
-
-Every department output follows a unified protocol: Department, Objective, What Is Known, What Is Missing, Main Output, Risks, and Recommended Next Step.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check + API key status |
+| GET | `/api/config` | Departments, workflows, model config |
+| POST | `/api/tasks/run` | Submit a new task |
+| GET | `/api/tasks/{id}/status` | Task status + step progress |
+| GET | `/api/tasks/{id}/output` | Final output + step outputs |
+| GET | `/api/tasks/{id}/trace` | Full execution trace |
+| GET | `/api/tasks/history` | All task history |
 
 ## Configuration
 
@@ -105,38 +126,31 @@ Environment variables (set in `.env`):
 
 ```
 founder-command-center/
-├── main.py              # CLI entry point
-├── config.py            # Configuration & registry
-├── router.py            # Task classification & routing
-├── client.py            # Anthropic API client
-├── prompts/             # 8 department prompt files
-├── workflows/           # Workflow execution modules
-│   ├── base.py          # Core workflow engine
-│   ├── financing_deck.py
-│   ├── website_strategy.py
-│   ├── proposal.py
-│   └── project_definition.py
-├── inputs/              # Input files
-├── outputs/             # Generated outputs
-├── logs/                # Execution logs
-└── docs/                # System documentation
+âââ main.py              # CLI entry point (V1)
+âââ config.py            # Configuration & registry
+âââ router.py            # Task classification & routing
+âââ client.py            # Anthropic API client
+âââ api/
+â   âââ server.py        # FastAPI backend (V1.1)
+âââ frontend/
+â   âââ app/
+â   â   âââ page.tsx     # Main dashboard
+â   â   âââ layout.tsx   # Root layout
+â   â   âââ globals.css  # FCC dark theme
+â   âââ lib/
+â   â   âââ api.ts       # TypeScript API client
+â   âââ package.json     # Next.js 14 project
+â   âââ next.config.js   # API proxy config
+â   âââ tailwind.config.ts
+âââ prompts/             # 8 department prompt files
+âââ workflows/           # Workflow execution modules
+â   âââ base.py          # Core workflow engine
+âââ inputs/              # Input files
+âââ outputs/             # Generated outputs (gitignored)
+âââ setup.sh             # One-command setup
+âââ .env.example         # Environment template
 ```
-
-## V1 Limitations
-
-- Sequential execution (no parallel department calls)
-- Keyword-based routing (not semantic)
-- No persistent memory across runs
-- No real-time data access
-- CLI only (no web UI)
-- Support departments (Research, Monetization) not in default chains
-
-## Upgrade Path
-
-V2 targets: LLM-based routing, parallel execution, web search integration, session memory, web UI, and multi-format export (PPTX/DOCX).
-
-See `docs/system_spec.md` for the full specification and roadmap.
 
 ## License
 
-Proprietary — CertaStrategy
+Proprietary â CertaStrategy
