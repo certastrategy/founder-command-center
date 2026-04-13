@@ -31,7 +31,7 @@ fi
 
 # Install Python dependencies
 echo "[1/3] Installing Python dependencies..."
-pip install -r requirements.txt -q
+python3 -m pip install -r requirements.txt -q
 echo "      Done."
 
 # Install frontend dependencies
@@ -46,7 +46,7 @@ echo ""
 
 # Start backend
 echo "  Starting backend (port 8000)..."
-python api/server.py &
+python3 api/server.py &
 BACKEND_PID=$!
 sleep 2
 
