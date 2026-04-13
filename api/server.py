@@ -18,9 +18,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Add project root to path so we can import FCC V1 modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
+sys.path.insert(0, PROJECT_ROOT)
+
+# Ensure .env is loaded from project root regardless of working directory
+from dotenv import load_dotenv
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"), override=True)
 
 import config
+# Refresh config values after explicit dotenv load
+config.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+config.MODEL_NAME = os.getenv("FCC_MODEL", "claude-sonnet-4-20250514")
+config.MAX_TOKENS = int(os.getenv("FCC_MAX_TOKENS", "4096"))
+config.TEMPERATURE = float(os.getenv("FCC_TEMPERATURE", "0.4"))
 from router import classify_task, get_workflow_chain
 from workflows.base import load_prompt, build_system_prompt, build_user_message
 from client import call_department, get_client
@@ -41,11 +51,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── In-memory task store ───────────────────────────────────
+# ─── In-memory task store ─────────────────────────────
 tasks: dict = {}
 
 
-# ─── Request / Response Models ──────────────────────────────
+# ─── Request / Response Models ────────────────────────
 class TaskRequest(BaseModel):
     title: str
     task_type: str = "auto"
@@ -60,7 +70,7 @@ class TaskResponse(BaseModel):
     status: str
 
 
-# ─── Helpers ────────────────────────────────────────────────
+# ─── Helpers ────────────────────────────────────
 
 def build_input_text(req: TaskRequest) -> str:
     """Convert structured form input into the markdown format FCC engine expects."""
@@ -86,7 +96,7 @@ def resolve_task_type(req: TaskRequest, input_text: str) -> str:
     return result
 
 
-# ─── Background Execution ──────────────────────────────────
+# ─── Background Execution ──────────────────────────
 
 def run_task_async(task_id: str, req: TaskRequest):
     """
@@ -209,7 +219,7 @@ def run_task_async(task_id: str, req: TaskRequest):
         logger.error("[Task %s] Workflow failed: %s", task_id, e)
 
 
-# ─── Endpoints ──────────────────────────────────────────────
+# ─── Endpoints ──────────────────────────────────
 
 @app.get("/api/health")
 def health():
