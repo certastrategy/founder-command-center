@@ -6,6 +6,7 @@ import os
 import json
 import logging
 from datetime import datetime
+from typing import Optional, List, Dict
 
 import config
 from client import call_department
@@ -50,7 +51,7 @@ def build_user_message(
     department_key: str,
     step_index: int,
     total_steps: int,
-    prior_outputs: list[dict],
+    prior_outputs: List[Dict],
     is_final: bool = False,
 ) -> str:
     """
@@ -91,8 +92,8 @@ def build_user_message(
 def execute_chain(
     user_input: str,
     workflow_key: str,
-    chain: list[str],
-    run_id: str | None = None,
+    chain: List[str],
+    run_id: Optional[str] = None,
 ) -> dict:
     """
     Execute a full department chain for a workflow.
@@ -112,8 +113,8 @@ def execute_chain(
     os.makedirs(run_dir, exist_ok=True)
 
     total_steps = len(chain)
-    prior_outputs: list[dict] = []
-    all_outputs: list[dict] = []
+    prior_outputs: List[Dict] = []
+    all_outputs: List[Dict] = []
 
     logger.info(
         "Starting workflow '%s' with %d steps (run=%s)",
@@ -175,7 +176,7 @@ def execute_chain(
 
         step_file = os.path.join(run_dir, f"step_{i+1:02d}_{dept_key}.md")
         with open(step_file, "w", encoding="utf-8") as f:
-            f.write(f"# {dept_name} \u2014 Step {i+1}/{total_steps}\n\n")
+            f.write(f"# {dept_name} --- Step {i+1}/{total_steps}\n\n")
             f.write(f"**Workflow**: {workflow_name}\n")
             f.write(f"**Run ID**: {run_id}\n")
             f.write(f"**Timestamp**: {output_record['timestamp']}\n\n")
@@ -185,7 +186,7 @@ def execute_chain(
 
         preview = response[:500]
         if len(response) > 500:
-            preview += "\n... [truncated \u2014 see full output in file]"
+            preview += "\n... [truncated --- see full output in file]"
         print(preview)
 
     meta = {
@@ -205,7 +206,7 @@ def execute_chain(
     if all_outputs:
         final_file = os.path.join(run_dir, "FINAL_OUTPUT.md")
         with open(final_file, "w", encoding="utf-8") as f:
-            f.write(f"# {workflow_name} \u2014 Final Integrated Output\n\n")
+            f.write(f"# {workflow_name} --- Final Integrated Output\n\n")
             f.write(f"**Run ID**: {run_id}\n")
             f.write(f"**Generated**: {all_outputs[-1]['timestamp']}\n\n")
             f.write("---\n\n")
