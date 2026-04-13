@@ -5,10 +5,11 @@ import {
   Terminal, Clock, Layers, Settings, Play, Trash2, Upload, Copy,
   Download, RotateCcw, Archive, ChevronDown, ChevronRight,
   CheckCircle2, XCircle, Loader2, Circle, AlertTriangle,
+  Eye, EyeOff, RefreshCw,
 } from "lucide-react"
 import {
   runTask, getTaskStatus, getTaskOutput, getTaskTrace, getTaskHistory,
-  getConfig, healthCheck,
+  getConfig, healthCheck, archiveTask, unarchiveTask,
   type TaskRequest, type TaskStatus, type TaskOutput,
   type HistoryTask, type StepOutput, type FCCConfig,
 } from "@/lib/api"
@@ -68,6 +69,13 @@ export default function FounderCommandCenter() {
   // History & trace
   const [history, setHistory] = useState<HistoryTask[]>([])
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set())
+  const [showArchived, setShowArchived] = useState(false)
+
+  // History detail view
+  const [historyDetail, setHistoryDetail] = useState<{
+    task: HistoryTask
+    output: TaskOutput | null
+  } | null>(null)
 
   // Check backend on mount
   useEffect(() => {
@@ -139,12 +147,12 @@ export default function FounderCommandCenter() {
           setOutputTab("final")
         }, 0)
 
-        getTaskHistory().then((h) => setHistory(h.tasks)).catch(() => {})
+        getTaskHistory(showArchived).then((h) => setHistory(h.tasks)).catch(() => {})
       }
     } catch (e) {
       console.error("Poll error:", e)
     }
-  }, [])
+  }, [showArchived])
 
   const handleRunTask = async () => {
     if (!form.title.trim()) return
@@ -185,18 +193,51 @@ export default function FounderCommandCenter() {
     if (pollRef.current) clearInterval(pollRef.current)
   }
 
+  // Re-run with same input: backfill form fields from input_data
+  const handleReRunWithInput = (inputData: TaskRequest) => {
+    setForm(inputData)
+    setView("command")
+    // Auto-run after a tick to let state settle
+    setTimeout(async () => {
+      setIsRunning(true)
+      setTaskOutput(null)
+      setTaskStatus(null)
+      setExpandedSteps(new Set())
+      setErrorMsg(null)
+      try {
+        const result = await runTask(inputData)
+        setTaskId(result.task_id)
+        localStorage.setItem("fcc_taskId", result.task_id)
+        pollRef.current = setInterval(() => pollStatus(result.task_id), 2000)
+        setTimeout(() => pollStatus(result.task_id), 500)
+      } catch (e: any) {
+        setIsRunning(false)
+        setErrorMsg(`Failed to start task: ${e?.message || String(e)}`)
+      }
+    }, 100)
+  }
+
+  // Retry a failed task with original input
+  const handleRetry = (inputData: TaskRequest) => {
+    handleReRunWithInput(inputData)
+  }
+
   const toggleStep = (i: number) => {
     const next = new Set(expandedSteps)
     next.has(i) ? next.delete(i) : next.add(i)
     setExpandedSteps(next)
   }
 
-  // Load history on view switch
+  // Load history on view switch or archive toggle
+  const loadHistory = useCallback(() => {
+    getTaskHistory(showArchived).then((h) => setHistory(h.tasks)).catch(() => {})
+  }, [showArchived])
+
   useEffect(() => {
     if (view === "history") {
-      getTaskHistory().then((h) => setHistory(h.tasks)).catch(() => {})
+      loadHistory()
     }
-  }, [view])
+  }, [view, loadHistory])
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -204,6 +245,93 @@ export default function FounderCommandCenter() {
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
+
+  // Handle clicking a history row to view details
+  const handleHistoryRowClick = async (task: HistoryTask) => {
+    try {
+      const output = await getTaskOutput(task.task_id)
+      setHistoryDetail({ task, output })
+    } catch {
+      setHistoryDetail({ task, output: null })
+    }
+  }
+
+  // Handle archive/unarchive
+  const handleArchive = async (taskId: string, currentlyArchived: number) => {
+    try {
+      if (currentlyArchived) {
+        await unarchiveTask(taskId)
+      } else {
+        await archiveTask(taskId)
+      }
+      loadHistory()
+      if (historyDetail?.task.task_id === taskId) {
+        setHistoryDetail(null)
+      }
+    } catch (e) {
+      console.error("Archive error:", e)
+    }
+  }
+
+  // Download complete report as .md
+  const handleDownloadReport = (task: HistoryTask | null, output: TaskOutput | null) => {
+    if (!task || !output) return
+    const lines: string[] = []
+    lines.push(`# ${task.title} — Complete Report`)
+    lines.push("")
+    lines.push(`**Task ID:** ${task.task_id}`)
+    lines.push(`**Task Type:** ${task.task_type}`)
+    lines.push(`**Workflow:** ${task.workflow_name || task.workflow_key}`)
+    lines.push(`**Status:** ${task.status}`)
+    lines.push(`**Created:** ${task.created_at ? new Date(task.created_at).toLocaleString() : "-"}`)
+    if (task.completed_at) lines.push(`**Completed:** ${new Date(task.completed_at).toLocaleString()}`)
+    if (task.total_duration) lines.push(`**Total Duration:** ${task.total_duration.toFixed(1)}s`)
+    lines.push("")
+    lines.push("---")
+    lines.push("")
+
+    // Final Output
+    lines.push("## Final Integrated Output")
+    lines.push("")
+    lines.push(output.final_output || "(No final output)")
+    lines.push("")
+    lines.push("---")
+    lines.push("")
+
+    // Department Outputs
+    lines.push("## Department Outputs")
+    lines.push("")
+    output.step_outputs.forEach((step, i) => {
+      lines.push(`### Step ${i + 1}: ${step.department} (${step.duration}s)`)
+      lines.push("")
+      lines.push(step.output)
+      lines.push("")
+    })
+
+    // Audit section
+    const audit = output.step_outputs.find(
+      (s) => s.dept_id === "audit_red_team" || s.department.toLowerCase().includes("audit")
+    )
+    if (audit) {
+      lines.push("---")
+      lines.push("")
+      lines.push("## Audit & Red Team Review")
+      lines.push("")
+      lines.push(audit.output)
+      lines.push("")
+    }
+
+    lines.push("---")
+    lines.push(`*Generated by Founder Command Center V1.1*`)
+
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `fcc-report-${task.task_id}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const navItems: { icon: typeof Terminal; view: View; label: string }[] = [
     { icon: Terminal, view: "command", label: "Command" },
@@ -404,9 +532,11 @@ export default function FounderCommandCenter() {
                     </div>
                   )}
                   {taskStatus.status === "failed" && (
-                    <div className="mt-4 p-3 bg-fcc-error/10 border border-fcc-error/30 rounded-md text-sm text-fcc-error flex items-center gap-2">
-                      <XCircle size={16} />
-                      Failed: {taskStatus.error || "Unknown error"}
+                    <div className="mt-4 p-3 bg-fcc-error/10 border border-fcc-error/30 rounded-md text-sm text-fcc-error">
+                      <div className="flex items-center gap-2 mb-2">
+                        <XCircle size={16} />
+                        Failed: {taskStatus.error || "Unknown error"}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -499,14 +629,26 @@ export default function FounderCommandCenter() {
                     <Copy size={12} /> Copy
                   </button>
                   <button onClick={() => {
-                    const blob = new Blob([taskOutput.final_output], { type: "text/markdown" })
-                    const url = URL.createObjectURL(blob)
-                    const a = document.createElement("a")
-                    a.href = url; a.download = `fcc-output-${taskId}.md`; a.click()
-                    URL.revokeObjectURL(url)
+                    // Full report download from command view
+                    if (taskId && taskStatus) {
+                      const taskObj: HistoryTask = {
+                        task_id: taskId,
+                        title: form.title,
+                        task_type: form.task_type,
+                        workflow_key: taskStatus.workflow_key,
+                        workflow_name: taskStatus.workflow_name,
+                        status: taskStatus.status,
+                        created_at: "",
+                        completed_at: null,
+                        total_duration: taskStatus.total_duration,
+                        archived: 0,
+                        input_data: form,
+                      }
+                      handleDownloadReport(taskObj, taskOutput)
+                    }
                   }}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors" title="Download as markdown">
-                    <Download size={12} /> .md
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors" title="Download complete report">
+                    <Download size={12} /> Report
                   </button>
                   <button onClick={handleRunTask} disabled={isRunning}
                     className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded disabled:opacity-50 transition-colors" title="Re-run task">
@@ -520,50 +662,201 @@ export default function FounderCommandCenter() {
 
         {/* --- HISTORY VIEW --- */}
         {view === "history" && (
-          <div className="p-6 overflow-y-auto h-full">
-            <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-              <Clock size={16} className="text-fcc-accent" /> Task History
-            </h2>
-            {history.length === 0 ? (
-              <p className="text-fcc-muted text-sm">No tasks yet. Run a task from the Command view.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-fcc-border text-fcc-muted text-xs text-left">
-                    <th className="py-2 px-3">Run ID</th>
-                    <th className="py-2 px-3">Title</th>
-                    <th className="py-2 px-3">Workflow</th>
-                    <th className="py-2 px-3">Status</th>
-                    <th className="py-2 px-3">Duration</th>
-                    <th className="py-2 px-3">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((t) => (
-                    <tr key={t.task_id} className="border-b border-fcc-border/50 hover:bg-fcc-surface/50">
-                      <td className="py-2 px-3 font-mono text-xs">{t.task_id}</td>
-                      <td className="py-2 px-3">{t.title}</td>
-                      <td className="py-2 px-3 text-fcc-muted text-xs">{t.workflow_name || t.workflow_key?.replace(/_/g, " ") || t.task_type}</td>
-                      <td className="py-2 px-3">
-                        <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${
-                          t.status === "completed" ? "bg-fcc-success/10 text-fcc-success"
-                            : t.status === "failed" ? "bg-fcc-error/10 text-fcc-error"
-                            : "bg-fcc-accent/10 text-fcc-accent"
-                        }`}>
-                          <StatusIcon status={t.status} />
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="py-2 px-3 text-fcc-muted text-xs">
-                        {t.total_duration ? `${t.total_duration.toFixed(1)}s` : "-"}
-                      </td>
-                      <td className="py-2 px-3 text-fcc-muted text-xs">
-                        {t.created_at ? new Date(t.created_at).toLocaleString() : "-"}
-                      </td>
+          <div className="flex h-full">
+            {/* History list */}
+            <div className={`${historyDetail ? "w-1/2 border-r border-fcc-border" : "flex-1"} p-6 overflow-y-auto`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold flex items-center gap-2">
+                  <Clock size={16} className="text-fcc-accent" /> Task History
+                </h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowArchived(!showArchived)
+                      // loadHistory will be triggered by the useEffect
+                    }}
+                    className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                      showArchived
+                        ? "bg-fcc-accent/10 text-fcc-accent"
+                        : "text-fcc-muted hover:text-fcc-text"
+                    }`}
+                    title={showArchived ? "Hide archived tasks" : "Show archived tasks"}
+                  >
+                    {showArchived ? <Eye size={12} /> : <EyeOff size={12} />}
+                    {showArchived ? "Showing archived" : "Archived hidden"}
+                  </button>
+                  <button onClick={loadHistory}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors"
+                    title="Refresh">
+                    <RefreshCw size={12} />
+                  </button>
+                </div>
+              </div>
+              {history.length === 0 ? (
+                <p className="text-fcc-muted text-sm">No tasks yet. Run a task from the Command view.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-fcc-border text-fcc-muted text-xs text-left">
+                      <th className="py-2 px-3">Run ID</th>
+                      <th className="py-2 px-3">Title</th>
+                      <th className="py-2 px-3">Workflow</th>
+                      <th className="py-2 px-3">Status</th>
+                      <th className="py-2 px-3">Duration</th>
+                      <th className="py-2 px-3">Date</th>
+                      <th className="py-2 px-3">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {history.map((t) => (
+                      <tr
+                        key={t.task_id}
+                        onClick={() => handleHistoryRowClick(t)}
+                        className={`border-b border-fcc-border/50 hover:bg-fcc-surface/50 cursor-pointer ${
+                          historyDetail?.task.task_id === t.task_id ? "bg-fcc-accent/5" : ""
+                        } ${t.archived ? "opacity-60" : ""}`}
+                      >
+                        <td className="py-2 px-3 font-mono text-xs">{t.task_id}</td>
+                        <td className="py-2 px-3">
+                          {t.title}
+                          {t.archived ? <span className="ml-1 text-[10px] text-fcc-muted">(archived)</span> : null}
+                        </td>
+                        <td className="py-2 px-3 text-fcc-muted text-xs">{t.workflow_name || t.workflow_key?.replace(/_/g, " ") || t.task_type}</td>
+                        <td className="py-2 px-3">
+                          <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${
+                            t.status === "completed" ? "bg-fcc-success/10 text-fcc-success"
+                              : t.status === "failed" ? "bg-fcc-error/10 text-fcc-error"
+                              : "bg-fcc-accent/10 text-fcc-accent"
+                          }`}>
+                            <StatusIcon status={t.status} />
+                            {t.status}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-fcc-muted text-xs">
+                          {t.total_duration ? `${t.total_duration.toFixed(1)}s` : "-"}
+                        </td>
+                        <td className="py-2 px-3 text-fcc-muted text-xs">
+                          {t.created_at ? new Date(t.created_at).toLocaleString() : "-"}
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            {/* Re-run button */}
+                            {t.input_data && t.input_data.title && (
+                              <button
+                                onClick={() => handleReRunWithInput(t.input_data)}
+                                className="p-1 text-fcc-muted hover:text-fcc-accent rounded transition-colors"
+                                title="Re-run with same input"
+                              >
+                                <RotateCcw size={12} />
+                              </button>
+                            )}
+                            {/* Retry button for failed tasks */}
+                            {t.status === "failed" && t.input_data && t.input_data.title && (
+                              <button
+                                onClick={() => handleRetry(t.input_data)}
+                                className="p-1 text-fcc-error hover:text-fcc-error/80 rounded transition-colors"
+                                title="Retry failed task"
+                              >
+                                <RefreshCw size={12} />
+                              </button>
+                            )}
+                            {/* Archive/Unarchive button */}
+                            <button
+                              onClick={() => handleArchive(t.task_id, t.archived)}
+                              className="p-1 text-fcc-muted hover:text-fcc-warning rounded transition-colors"
+                              title={t.archived ? "Unarchive" : "Archive"}
+                            >
+                              <Archive size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* History detail panel */}
+            {historyDetail && (
+              <div className="w-1/2 flex flex-col overflow-hidden">
+                {/* Detail header */}
+                <div className="p-4 border-b border-fcc-border shrink-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold">{historyDetail.task.title}</h3>
+                    <button
+                      onClick={() => setHistoryDetail(null)}
+                      className="text-fcc-muted hover:text-fcc-text text-xs"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs text-fcc-muted">
+                    <span>ID: <span className="font-mono">{historyDetail.task.task_id}</span></span>
+                    <span>Type: {historyDetail.task.task_type}</span>
+                    <span>Status: <span className={
+                      historyDetail.task.status === "completed" ? "text-fcc-success"
+                        : historyDetail.task.status === "failed" ? "text-fcc-error"
+                        : "text-fcc-accent"
+                    }>{historyDetail.task.status}</span></span>
+                    {historyDetail.task.created_at && (
+                      <span>Created: {new Date(historyDetail.task.created_at).toLocaleString()}</span>
+                    )}
+                  </div>
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 mt-3">
+                    {historyDetail.output && (
+                      <>
+                        <button
+                          onClick={() => handleDownloadReport(historyDetail.task, historyDetail.output)}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-fcc-bg border border-fcc-border rounded hover:border-fcc-accent transition-colors"
+                        >
+                          <Download size={12} /> Download Report
+                        </button>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(historyDetail.output?.final_output || "")}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-fcc-bg border border-fcc-border rounded hover:border-fcc-accent transition-colors"
+                        >
+                          <Copy size={12} /> Copy Output
+                        </button>
+                      </>
+                    )}
+                    {historyDetail.task.input_data && historyDetail.task.input_data.title && (
+                      <button
+                        onClick={() => {
+                          setForm(historyDetail.task.input_data)
+                          setView("command")
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-fcc-bg border border-fcc-border rounded hover:border-fcc-accent transition-colors"
+                      >
+                        <RotateCcw size={12} /> Fill Form
+                      </button>
+                    )}
+                    {historyDetail.task.status === "failed" && historyDetail.task.input_data?.title && (
+                      <button
+                        onClick={() => handleRetry(historyDetail.task.input_data)}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-fcc-error/10 border border-fcc-error/30 text-fcc-error rounded hover:bg-fcc-error/20 transition-colors"
+                      >
+                        <RefreshCw size={12} /> Retry
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* Detail output */}
+                <div className="flex-1 overflow-y-auto p-4">
+                  {historyDetail.output ? (
+                    <div className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
+                      {historyDetail.output.final_output || <span className="text-fcc-muted">No final output available.</span>}
+                    </div>
+                  ) : (
+                    <p className="text-fcc-muted text-sm">
+                      {historyDetail.task.status === "running" || historyDetail.task.status === "queued"
+                        ? "Task is still running..."
+                        : "No output available for this task."}
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
