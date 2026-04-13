@@ -1,9 +1,9 @@
 /**
- * FCC V1.1 — Frontend API Client
+ * FCC V1.1 --- Frontend API Client
  * All calls go through /api/* which Next.js rewrites to the FastAPI backend.
  */
 
-// ─── Types ─────────────────────────────────────────────────
+// --- Types ---
 
 export interface TaskRequest {
   title: string
@@ -69,6 +69,7 @@ export interface TaskTrace {
     error?: string
   }>
   step_outputs: StepOutput[]
+  input_data: TaskRequest
 }
 
 export interface HistoryTask {
@@ -81,6 +82,8 @@ export interface HistoryTask {
   created_at: string
   completed_at: string | null
   total_duration: number | null
+  archived: number
+  input_data: TaskRequest
 }
 
 export interface DepartmentInfo {
@@ -103,7 +106,7 @@ export interface FCCConfig {
   version: string
 }
 
-// ─── API Functions ─────────────────────────────────────────
+// --- API Functions ---
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, options)
@@ -134,8 +137,16 @@ export async function getTaskTrace(taskId: string): Promise<TaskTrace> {
   return apiFetch<TaskTrace>(`/api/tasks/${taskId}/trace`)
 }
 
-export async function getTaskHistory(): Promise<{ tasks: HistoryTask[] }> {
-  return apiFetch<{ tasks: HistoryTask[] }>("/api/tasks/history")
+export async function getTaskHistory(includeArchived: boolean = false): Promise<{ tasks: HistoryTask[] }> {
+  return apiFetch<{ tasks: HistoryTask[] }>(`/api/tasks/history?include_archived=${includeArchived}`)
+}
+
+export async function archiveTask(taskId: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/tasks/${taskId}/archive`, { method: "POST" })
+}
+
+export async function unarchiveTask(taskId: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/tasks/${taskId}/unarchive`, { method: "POST" })
 }
 
 export async function getConfig(): Promise<FCCConfig> {
@@ -144,4 +155,4 @@ export async function getConfig(): Promise<FCCConfig> {
 
 export async function healthCheck(): Promise<{ status: string; version: string; api_key_configured: boolean }> {
   return apiFetch("/api/health")
-  }
+}
