@@ -1,9 +1,10 @@
 """
 Workflow: Proposal / Partnership Proposal
 
-Chain: Command Center \u2192 Strategy & Structuring \u2192 Capital & Deal
-       \u2192 Narrative & Media \u2192 Audit & Red Team \u2192 Command Center (Final)
+Chain: Command Center -> Strategy & Structuring -> Capital & Deal
+       -> Narrative & Media -> Audit & Red Team -> Command Center (Final)
 """
+from typing import Optional
 from workflows.base import execute_chain
 from router import get_workflow_chain
 
@@ -11,7 +12,7 @@ from router import get_workflow_chain
 WORKFLOW_KEY = "proposal"
 
 
-def run(user_input: str, run_id: str | None = None) -> dict:
+def run(user_input: str, run_id: Optional[str] = None) -> dict:
     """
     Execute the Proposal workflow.
 
