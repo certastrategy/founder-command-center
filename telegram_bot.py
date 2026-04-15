@@ -1,4 +1,4 @@
-""
+"""
 Founder Command Center — Telegram Bot
 Lightweight Telegram interface for submitting tasks to the FCC backend.
 
