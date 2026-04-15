@@ -1,12 +1,12 @@
 """
-Founder Command Center — Telegram Bot
+Founder Command Center - Telegram Bot
 Lightweight Telegram interface for submitting tasks to the FCC backend.
 
 Usage:
     TELEGRAM_BOT_TOKEN=<token> python3 telegram_bot.py
 Environment variables:
-    TELEGRAM_BOT_TOKEN  — Required. Bot token from @BotFather.
-    FCC_BACKEND_URL     — Optional. Defaults to https://web-production-82e2.up.railway.app
+    TELEGRAM_BOT_TOKEN - Required. Bot token from @BotFather.
+    FCC_BACKEND_URL    - Optional. Defaults to https://web-production-82e2.up.railway.app
 """
 
 import os
