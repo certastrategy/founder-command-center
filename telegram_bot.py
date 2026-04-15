@@ -1,10 +1,9 @@
-"""
+""
 Founder Command Center — Telegram Bot
 Lightweight Telegram interface for submitting tasks to the FCC backend.
 
 Usage:
     TELEGRAM_BOT_TOKEN=<token> python3 telegram_bot.py
-
 Environment variables:
     TELEGRAM_BOT_TOKEN  — Required. Bot token from @BotFather.
     FCC_BACKEND_URL     — Optional. Defaults to https://web-production-82e2.up.railway.app
@@ -14,7 +13,7 @@ import os
 import sys
 import logging
 import asyncio
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import httpx
 from telegram import Update, BotCommand
@@ -106,7 +105,7 @@ def _escape_md(text: str) -> str:
     return "".join(out)
 
 
-def _split_text(text: str, limit: int = TELEGRAM_MSG_LIMIT) -> list[str]:
+def _split_text(text: str, limit: int = TELEGRAM_MSG_LIMIT) -> List[str]:
     """Split long text into chunks of at most *limit* characters."""
     if len(text) <= limit:
         return [text]
