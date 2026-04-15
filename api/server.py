@@ -46,7 +46,7 @@ app = FastAPI(title="Founder Command Center V1.1", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://rulemarkmarket.com", "https://www.rulemarkmarket.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
