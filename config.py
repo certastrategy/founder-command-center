@@ -61,6 +61,16 @@ DEPARTMENTS = {
         "prompt_file": "audit_red_team.md",
         "description": "Critical review, risk identification, adversarial testing, and quality assurance.",
     },
+    "competitive_intelligence": {
+        "name": "Competitive Intelligence",
+        "prompt_file": "competitive_intelligence.md",
+        "description": "Competitor analysis, market positioning, differentiation strategy, and threat assessment.",
+    },
+    "global_market_expansion": {
+        "name": "Global Market Expansion",
+        "prompt_file": "global_market_expansion.md",
+        "description": "International market assessment, entry strategy, market sequencing, and localization requirements.",
+    },
 }
 
 # --- Workflow Definitions ---
@@ -98,6 +108,7 @@ WORKFLOWS = {
             "command_center",
             "strategy_structuring",
             "research_intelligence",
+            "competitive_intelligence",
             "capital_deal",
             "narrative_media",
             "audit_red_team",
@@ -114,6 +125,7 @@ WORKFLOWS = {
             "research_intelligence",
             "product_tech",
             "narrative_media",
+            "global_market_expansion",
             "audit_red_team",
             "command_center",
         ],
