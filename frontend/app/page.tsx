@@ -333,6 +333,61 @@ export default function FounderCommandCenter() {
     URL.revokeObjectURL(url)
   }
 
+  // Download final output as PDF using jsPDF
+  const handleDownloadPDF = () => {
+    if (!taskOutput) return
+    const jspdfLib = (window as any).jspdf
+    if (!jspdfLib || !jspdfLib.jsPDF) {
+      alert('PDF library is still loading. Please wait a moment and try again.')
+      return
+    }
+    const { jsPDF } = jspdfLib
+    const doc = new jsPDF()
+
+    const title = form.title || "FCC Output"
+    const typeLabel = (TASK_TYPES.find((t) => t.value === form.task_type)?.label) || form.task_type || "Auto-Detect"
+    const date = new Date().toLocaleDateString()
+
+    // --- Cover page ---
+    doc.setFontSize(24)
+    doc.text("Certa Systems", 20, 40)
+    doc.setFontSize(16)
+    doc.text("Founder Command Center", 20, 55)
+    doc.setFontSize(20)
+    const titleLines = doc.splitTextToSize(title, 170)
+    doc.text(titleLines, 20, 80)
+    doc.setFontSize(12)
+    doc.text(`Task Type: ${typeLabel}`, 20, 80 + titleLines.length * 9 + 10)
+    doc.text(`Date: ${date}`, 20, 80 + titleLines.length * 9 + 20)
+
+    // --- Content pages ---
+    doc.addPage()
+    doc.setFontSize(14)
+    doc.text("Final Output", 20, 20)
+    doc.setFontSize(11)
+    const contentLines = doc.splitTextToSize(taskOutput.final_output || "(No final output)", 170)
+    let y = 32
+    contentLines.forEach((line: string) => {
+      if (y > 270) {
+        doc.addPage()
+        y = 20
+      }
+      doc.text(line, 20, y)
+      y += 6
+    })
+
+    // --- Page numbers on every page ---
+    const pageCount = doc.internal.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      doc.setFontSize(9)
+      doc.text(`${i} / ${pageCount}`, 190, 290, { align: "right" })
+    }
+
+    const safeTitle = title.replace(/[^a-zA-Z0-9\-_]+/g, "-").replace(/^-+|-+$/g, "") || "fcc-output"
+    doc.save(`${safeTitle}-${date}.pdf`)
+  }
+
   const navItems: { icon: typeof Terminal; view: View; label: string }[] = [
     { icon: Terminal, view: "command", label: "Command" },
     { icon: Clock, view: "history", label: "History" },
@@ -649,6 +704,10 @@ export default function FounderCommandCenter() {
                   }}
                     className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors" title="Download complete report">
                     <Download size={12} /> Report
+                  </button>
+                  <button onClick={handleDownloadPDF}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded transition-colors" title="Download as PDF">
+                    <Download size={12} /> PDF
                   </button>
                   <button onClick={handleRunTask} disabled={isRunning}
                     className="flex items-center gap-1 px-2 py-1.5 text-xs text-fcc-muted hover:text-fcc-text rounded disabled:opacity-50 transition-colors" title="Re-run task">
