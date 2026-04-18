@@ -97,6 +97,7 @@ WORKFLOWS = {
         "chain": [
             "command_center",
             "strategy_structuring",
+            "research_intelligence",
             "capital_deal",
             "narrative_media",
             "audit_red_team",
@@ -110,6 +111,7 @@ WORKFLOWS = {
         "chain": [
             "command_center",
             "strategy_structuring",
+            "research_intelligence",
             "product_tech",
             "narrative_media",
             "audit_red_team",
